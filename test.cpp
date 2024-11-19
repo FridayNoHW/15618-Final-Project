@@ -16,6 +16,7 @@ int test_sequential() {
 
   list.insert(10);
   list.insert(20);
+  list.print_list();
   list.insert(15);
 
   list.remove(15);
@@ -32,12 +33,12 @@ int test_sequential() {
     cout << "First element is " << curr->key << " while it should be 5\n";
     ret = -1;
   }
-  curr = curr->next.load();
+  curr = list.get_next(curr);
   if (curr->key != 20) {
     cout << "Second element is " << curr->key << " while it should be 20\n";
     ret = -1;
   }
-  curr = curr->next.load();
+  curr = list.get_next(curr);
   if (curr->key != 25) {
     cout << "Third element is " << curr->key << " while it should be 25\n";
     ret = -1;
@@ -170,7 +171,7 @@ bool check_mixed_worker_no_delete(LockFreeList<int> &list, int num_threads) {
       cout << "Expected " << i << " to be deleted but it's still in the list\n";
       return false;
     }
-    curr = curr->next.load();
+    curr = list.get_next(curr);
   }
 
   // make sure the list is not longer than expected
@@ -257,7 +258,7 @@ int test_mixed() {
   cout << "State of the list after mixed operations with all deletions:\n";
   list.print_list();
   // check that the list is empty
-  if (list.get_head()->next != list.get_tail()) {
+  if (list.get_next(list.get_head()) != list.get_tail()) {
     cout << "Mixed operations with all deletions failed\n";
     ret = -1;
   } else {
