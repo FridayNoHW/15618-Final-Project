@@ -67,8 +67,9 @@ public:
   }
 
   /**
-   * @brief Helper function to get the head of the list. The head is a sentinel node
-   * 
+   * @brief Helper function to get the head of the list. The head is a sentinel
+   * node
+   *
    * @return Node<KeyType>* The head of the list
    */
   Node<KeyType> *get_head() { return head; }
@@ -76,14 +77,15 @@ public:
   /**
    * @brief Helper function to get the front of the list. The front is the first
    * node after the head
-   * 
+   *
    * @return Node<KeyType>* The front of the list
    */
   Node<KeyType> *get_front() { return head->next.load(); }
 
   /**
-   * @brief Helper function to get the tail of the list. The tail is a sentinel node
-   * 
+   * @brief Helper function to get the tail of the list. The tail is a sentinel
+   * node
+   *
    * @return Node<KeyType>* The tail of the list
    */
   Node<KeyType> *get_tail() { return tail; }
@@ -101,9 +103,9 @@ template <typename KeyType>
  * @param key Key to be inserted
  * @param left_node Pointer to be modified to point to the node before the
  * key
- * @note compare_exchange_weak is not used because although it's documented that it's
- * faster than spinning on compare_exchange_strong, the amount of extra work involved
- * in each iteration is not minimal
+ * @note compare_exchange_weak is not used because although it's documented that
+ * it's faster than spinning on compare_exchange_strong, the amount of extra
+ * work involved in each iteration is not minimal
  * @return Node<KeyType>* The node to the right where the key should be inserted
  */
 Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
@@ -177,7 +179,7 @@ Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
 template <typename KeyType>
 /**
  * @brief Insert a key into the list sorted by key
- * 
+ *
  * @param key Key to be inserted
  * @return true If the key is successfully inserted, false otherwise
  */
@@ -207,9 +209,10 @@ bool LockFreeList<KeyType>::insert(const KeyType key) {
 template <typename KeyType>
 /**
  * @brief Remove a key from the list
- * 
+ *
  * @param search_key Key to be removed
- * @return true If the key is successfully removed, false if the key is not found
+ * @return true If the key is successfully removed, false if the key is not
+ * found
  */
 bool LockFreeList<KeyType>::remove(const KeyType search_key) {
   Node<KeyType> *right_node, *right_node_next, *left_node;
@@ -239,13 +242,24 @@ bool LockFreeList<KeyType>::remove(const KeyType search_key) {
 }
 
 template <typename KeyType>
+/**
+ * @brief Find a key in the list
+ *
+ * @param search_key Key to be searched
+ * @return true If the key is found, false otherwise
+ */
 bool LockFreeList<KeyType>::find(const KeyType search_key) {
   Node<KeyType> *right_node, *left_node;
   right_node = search(search_key, &left_node);
   return right_node != tail && right_node->key == search_key;
 }
 
-template <typename KeyType> void LockFreeList<KeyType>::print_list() {
+template <typename KeyType>
+/**
+ * @brief A helper function to print the list after operations
+ * @note Not thread-safe
+ */
+void LockFreeList<KeyType>::print_list() {
   Node<KeyType> *current = get_front();
   while (current != tail) {
     if (!current->is_marked()) {
