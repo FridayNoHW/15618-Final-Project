@@ -32,12 +32,12 @@ int test_sequential() {
     cout << "First element is " << curr->key << " while it should be 5\n";
     ret = -1;
   }
-  curr = curr->next.load();
+  curr = list.get_next(curr);
   if (curr->key != 20) {
     cout << "Second element is " << curr->key << " while it should be 20\n";
     ret = -1;
   }
-  curr = curr->next.load();
+  curr = list.get_next(curr);
   if (curr->key != 25) {
     cout << "Third element is " << curr->key << " while it should be 25\n";
     ret = -1;
@@ -132,6 +132,19 @@ void mixed_worker_all_delete(LockFreeList<int> &list, int thread_id) {
   }
 }
 
+void aba_all_delete(LockFreeList<int> &list) {
+  for (int i = 0; i < NUM_OPERATIONS; ++i) {
+    if (i % 2 == 0) {
+      list.insert(i);
+    } else {
+      for (int attempt = 0; attempt < 3; ++attempt) {
+        if (list.remove(i-1)) break;
+        this_thread::sleep_for(chrono::milliseconds(1 << attempt));
+      }
+    }
+  }
+}
+
 /**
  * @brief Helper function to check that all the elements are in the list
  * are reomved (can't be found).
@@ -170,7 +183,7 @@ bool check_mixed_worker_no_delete(LockFreeList<int> &list, int num_threads) {
       cout << "Expected " << i << " to be deleted but it's still in the list\n";
       return false;
     }
-    curr = curr->next.load();
+    curr = list.get_next(curr);
   }
 
   // make sure the list is not longer than expected
@@ -196,7 +209,7 @@ int test_mixed() {
 
   LockFreeList<int> list;
 
-  int num_threads = 4;
+  int num_threads = 8;
   vector<thread> separate_work_threads;
   vector<thread> mixed_work_threads;
 
@@ -257,7 +270,25 @@ int test_mixed() {
   cout << "State of the list after mixed operations with all deletions:\n";
   list.print_list();
   // check that the list is empty
-  if (list.get_head()->next != list.get_tail()) {
+  if (list.get_front() != list.get_tail()) {
+    cout << "Mixed operations with all deletions failed\n";
+    ret = -1;
+  } else {
+    cout << "Mixed operations with all deletions passed\n";
+  }
+
+  cout << "---------- Testing mixed operations with all deletions ----------\n";
+  mixed_work_threads.clear();
+  for (int i = 0; i < num_threads; ++i) {
+    mixed_work_threads.push_back(thread(aba_all_delete, ref(list)));
+  }
+  for (auto &t : mixed_work_threads) {
+    t.join();
+  }
+  cout << "State of the list after mixed operations with all deletions:\n";
+  list.print_list();
+  // check that the list is empty
+  if (list.get_front() != list.get_tail()) {
     cout << "Mixed operations with all deletions failed\n";
     ret = -1;
   } else {
