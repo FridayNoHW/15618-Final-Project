@@ -3,7 +3,7 @@
 #include <vector>
 
 /**
- * @brief A simpler test case for the lock-free list where operations are done
+ * @brief A simpler test case for the list where operations are done
  * sequentially
  *
  * This test is just to make sure that the code can run and operations can be
@@ -51,7 +51,7 @@ int test_sequential() {
 /**
  * @brief Number of operations to be performed by each worker
  */
-const int NUM_OPERATIONS = 20;
+const int NUM_OPERATIONS = 1000;
 
 /**
  * @brief Worker function to insert elements into the list
@@ -78,7 +78,8 @@ void insert_worker(CoarseGrainList<int> &list, int start, int end) {
  */
 void remove_worker(CoarseGrainList<int> &list, int start, int end) {
   for (int i = start; i < end; ++i) {
-    for (int attempt = 0; attempt < 3; ++attempt) {
+    // retry many times if needed b/c not sure if mutex maintains bounded wait
+    for (int attempt = 0; attempt < 10; ++attempt) {
       if (list.remove(i))
         break;
       this_thread::sleep_for(chrono::milliseconds(1 << attempt));
@@ -100,7 +101,7 @@ void mixed_worker_no_delete(CoarseGrainList<int> &list, int id) {
     if (i % 2 == 0) {
       list.insert(i + id * NUM_OPERATIONS);
     } else {
-      for (int attempt = 0; attempt < 1; ++attempt) {
+      for (int attempt = 0; attempt < 2; ++attempt) {
         if (list.remove(i))
           break;
         this_thread::sleep_for(chrono::milliseconds(1 << attempt));
@@ -125,7 +126,7 @@ void mixed_worker_all_delete(CoarseGrainList<int> &list, int thread_id) {
     if (i % 2 == 0) {
       list.insert(base + i);
     } else {
-      for (int attempt = 0; attempt < 3; ++attempt) {
+      for (int attempt = 0; attempt < 5; ++attempt) {
         if (list.remove(base + i - 1))
           break;
         this_thread::sleep_for(chrono::milliseconds(1 << attempt));
@@ -151,9 +152,9 @@ bool check_separate_workers(CoarseGrainList<int> &list) {
 }
 
 /**
- * @brief Helper function to check that the list contains the expected elements (even numbers)
- * after mixed operations without actual deletions. We also check that the length of the list
- * is as expected.
+ * @brief Helper function to check that the list contains the expected elements
+ * (even numbers) after mixed operations without actual deletions. We also check
+ * that the length of the list is as expected.
  *
  * @param list CoarseGrainList object
  * @param num_threads Number of threads
@@ -198,7 +199,7 @@ int test_mixed() {
 
   CoarseGrainList<int> list;
 
-  int num_threads = 8;
+  int num_threads = 16;
   vector<thread> separate_work_threads;
   vector<thread> mixed_work_threads;
 
@@ -238,9 +239,11 @@ int test_mixed() {
     t.join();
   }
 
+#ifdef DEBUG
   cout
       << "State of the list after mixed operations without actual deletions:\n";
   list.print_list();
+#endif
   if (!check_mixed_worker_no_delete(list, num_threads)) {
     cout << "Mixed operations without actual deletions failed\n";
     ret = -1;
@@ -271,7 +274,7 @@ int test_mixed() {
 
 /**
  * @brief Entry point. Run the tests and print the results.
- * 
+ *
  * @return int 0 if program finishes
  */
 int main() {
