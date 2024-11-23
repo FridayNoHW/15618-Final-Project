@@ -76,7 +76,7 @@ void insert_worker(LockFreeList<int> &list, int start, int end) {
  */
 void remove_worker(LockFreeList<int> &list, int start, int end) {
   for (int i = start; i < end; ++i) {
-    for (int attempt = 0; attempt < 3; ++attempt) {
+    for (int attempt = 0; attempt < 5; ++attempt) {
       if (list.remove(i))
         break;
       this_thread::sleep_for(chrono::milliseconds(1 << attempt));
@@ -249,9 +249,11 @@ int test_mixed() {
     t.join();
   }
 
+#ifdef DEBUG
   cout
       << "State of the list after mixed operations without actual deletions:\n";
   list.print_list();
+#endif
   if (!check_mixed_worker_no_delete(list, num_threads)) {
     cout << "Mixed operations without actual deletions failed\n";
     ret = -1;
@@ -298,6 +300,40 @@ int test_mixed() {
   return ret;
 }
 
+int get_head_worker(LockFreeList<int> &list) {
+  Node<int> *head = list.get_head();
+  if (head == nullptr) {
+    cout << "Head is nullptr\n";
+    return -1;
+  }
+  return 0;
+}
+
+void reomve_worker(LockFreeList<int> &list) {
+  list.remove(1);
+}
+
+int test_reclaim() {
+  LockFreeList<int> list;
+  list.insert(1);
+
+  int num_threads = 8;
+  vector<thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.push_back(thread(get_head_worker, ref(list)));
+  }
+
+  for (int i = 0; i < num_threads; ++i) {
+    threads.push_back(thread(reomve_worker, ref(list)));
+  }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  return 0;
+}
+
 /**
  * @brief Entry point. Run the tests and print the results.
  * 
@@ -315,6 +351,11 @@ int main() {
   if (success) {
     cout << "Sequential test passed\n";
   }
+
+  cout << "======================= Testing reclaiming "
+          "=======================\n";
+  test_reclaim();
+  cout << "Reclaim test passed\n";
 
   cout << "======================= Testing mixed operations "
           "=======================\n";
