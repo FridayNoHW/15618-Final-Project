@@ -10,17 +10,16 @@
 #ifndef LOCK_FREE_LIST_H
 #define LOCK_FREE_LIST_H
 
+#include <assert.h>
 #include <atomic>
+#include <cstring>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <vector>
-#include <sstream>
-#include <iostream>
-#include <assert.h>
-#include <cstring>
 using namespace std;
 
-#define DEBUG
+// #define DEBUG
 
 #ifdef DEBUG
 #define ASSERT(x) assert(x)
@@ -148,8 +147,6 @@ public:
     // use default constructor for KeyType
     head = new Node<KeyType>(KeyType{});
     tail = new Node<KeyType>(KeyType{});
-    // printf("Head address: %p\n", head);
-    // printf("Tail address: %p\n", tail);
     head->next.store(tail);
   }
 
@@ -218,33 +215,24 @@ template <typename KeyType>
  */
 Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
                                              Node<KeyType> **left_node) {
-  retry:
-  std::ostringstream oss;
-  oss << std::hex << std::this_thread::get_id();
-  string thread_id = oss.str();
+retry:
   // hp_manager.clear(0);
   // hp_manager.clear(1);
   // hp_manager.clear(2);
 
   Node<KeyType> *left_node_next;
   Node<KeyType> *right_node;
-  // printf("thread %s ------ Searching for %d\n",thread_id.c_str(), key);
   while (true) {
     Node<KeyType> *t = head;
-    // printf("search %d: thread_id %s: stop protecting initial t %p\n", key, thread_id.c_str(), hp_manager.get_protected(0));
     hp_manager.protect(t, 0);
-    // printf("search %d: thread_id %s: now protecting initial t %p\n", key, thread_id.c_str(), t);
     Node<KeyType> *t_next = head->next.load();
-    // printf("search %d: thread id: %s: initial t_next %p\n", key, thread_id.c_str(), t_next);
     hp_manager.protect(t_next, 1);
-    // printf("search %d: thread id: %s: now protecting initial t_next %p\n", key, thread_id.c_str(), t_next);
-    if (t->next.load() != t_next || t->is_deleted()) {
+    if (t->next.load() != t_next || t->is_deleted() || t_next->is_deleted()) {
       goto retry;
     }
 
     // 1. Find left_node and right_node (right node might be marked)
     do {
-      // printf("search %d: thread id: %s: start: current node address: %p, next node address: %p\n", key, thread_id.c_str(), t, t_next);
       ASSERT(hp_manager.is_protected(t));
       ASSERT(hp_manager.is_protected(t_next));
       /* unlike the paper, where the references are stored in the next
@@ -252,57 +240,34 @@ Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
       if (!t->is_marked()) {
         ASSERT(hp_manager.is_protected(t));
         *left_node = t;
-        // printf("search %d: thread_id %s: stop protecting left_node at index 3 %p\n", key, thread_id.c_str(), hp_manager.get_protected(2));
         hp_manager.protect(*left_node, 3);
-        // printf("search %d: thread_id %s: now protecting left_node at index 3 %p\n", key, thread_id.c_str(), *left_node);
+        if (t->is_deleted()) {
+          goto retry;
+        }
         left_node_next = t_next;
       }
 
-      ASSERT(hp_manager.is_protected(t_next));
-
-      // printf("search %d: thread id: %s: before update t: current node address: %p, next node address: %p\n", key, thread_id.c_str(), t, t_next);
       // NOTE: unlike the paper, we don't need get_marked_reference()
       // because the pointer is not changed in this implementation
       t = t_next;
-      // printf("search %d: thread id: %s: after update t: current node address: %p, next node address: %p\n", key, thread_id.c_str(), t, t_next);
       if (t == tail) {
         break;
       }
       // t_next updated after the break statement because if we break here,
       // we no longer need to update left_node_next
-      if (!addr_valid(t)) {
-        // printf("search %d: t bad addr %p\n", key, t);
-        std::ostringstream oss;
-        oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-        // printf("search %d: thread id: %s: t node address: %p\n", key, oss.str().c_str(), t);
-      }
-      // printf("search %d: thread id: %s: before loading t->next: current node address: %p, next node address: %p\n", key, thread_id.c_str(), t, t_next);
-
-      ASSERT(hp_manager.is_protected(t));
       t_next = t->next.load();
-      // NOTE: end of potential race, t->next gets physically deleted after we load
-      // printf("search %d: thread_id %s: stop protecting t_next at index 2 %p\n", key, thread_id.c_str(), hp_manager.get_protected(2));
       hp_manager.protect(t_next, 2);
-      if (t->next.load() != t_next || t->is_deleted()) {
-        // printf("search %d: current node changed, restarting search\n", key);
+      // NOTE: one of the potential races we are trying to solve here. t->next
+      // could get physically deleted after we load
+      if (t->next.load() != t_next || t->is_deleted() || t_next->is_deleted()) {
         goto retry;
-      }
-      // printf("search %d: thread_id %s: now protecting t_next at index 2 %p\n", key, thread_id.c_str(), t_next);
-      // printf("search %d: thread id: %s: after loading t->next: current node address: %p, next node address: %p\n", key, thread_id.c_str(), t, t_next);
-      if (!addr_valid(t_next)) {
-        // printf("search %d: t_next bad addr %p retrieved from t %p\n", key, t_next, t);
-        std::ostringstream oss;
-        oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-        // printf("search %d: thread id: %s: t_next node address: %p\n", key, oss.str().c_str(), t_next);
       }
 
       // rotate the hazard pointers
-      // printf("search %d: thread id: %s: stop protecting t %p\n", key, thread_id.c_str(), hp_manager.get_protected(0));
       hp_manager.protect(t, 0);
-      // printf("search %d: thread id: %s: now protecting t %p\n", key, thread_id.c_str(), t);
-      // printf("search %d: thread id: %s: stop protecting t_next %p\n", key, thread_id.c_str(), hp_manager.get_protected(1));
+      ASSERT(!t->is_deleted());
       hp_manager.protect(t_next, 1);
-      // printf("search %d: thread id: %s: now protecting t_next %p\n", key, thread_id.c_str(), t_next);
+      ASSERT(!t_next->is_deleted());
 
       ASSERT(hp_manager.is_protected(t));
       ASSERT(hp_manager.is_protected(t_next));
@@ -312,7 +277,6 @@ Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
 
     right_node = t;
     ASSERT(hp_manager.is_protected(right_node));
-    // printf("search %d: candidate right node address: %p\n", key, right_node);
 
     // 2. Check if the nodes are adjacent
     if (left_node_next == right_node) {
@@ -331,12 +295,6 @@ Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
     ASSERT(hp_manager.is_protected(right_node));
     if ((*left_node)
             ->next.compare_exchange_strong(left_node_next, right_node)) {
-      if (!addr_valid(right_node)) {
-        // printf("search %d: right node bad addr %p\n", key, right_node);
-        std::ostringstream oss;
-        oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-        // printf("search %d: thread id: %s: right node address: %p\n", key, oss.str().c_str(), right_node);
-      }
       if (right_node != tail && right_node->is_marked()) {
         continue;
       } else {
@@ -354,17 +312,12 @@ template <typename KeyType>
  * @return true If the key is successfully inserted, false otherwise
  */
 bool LockFreeList<KeyType>::insert(const KeyType key) {
-  // printf("------- Inserting %d\n", key);
   Node<KeyType> *new_node = new Node<KeyType>(key);
-  // printf("insert %d: allocated new node address: %p\n", key, new_node);
-  // printf("insert %d: stop protecting %p\n", key, hp_manager.get_protected(4));
   hp_manager.protect(new_node, 4);
-  // printf("insert %d: now protecting %p\n", key, new_node);
   Node<KeyType> *left_node, *right_node;
 
   while (true) {
     right_node = search(key, &left_node);
-    // printf("insert %d: right node address: %p\n", key, right_node);
     ASSERT(hp_manager.is_protected(right_node));
 
     // duplicate key, release allocated memory
@@ -380,19 +333,6 @@ bool LockFreeList<KeyType>::insert(const KeyType key) {
 
     // loop back until we get a chance to insert the new node
     if (left_node->next.compare_exchange_strong(right_node, new_node)) {
-      // printf("insert %d: inserted node address: %p\n", key, new_node);
-      if (!addr_valid(new_node)) {
-        // printf("insert %d: new node bad addr %p\n", key, new_node);
-        std::ostringstream oss;
-        oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-        // printf("insert %d: thread id: %s: new node address: %p\n", key, oss.str().c_str(), new_node);
-      }
-      if (!addr_valid(right_node)) {
-        // printf("insert %d: right node bad addr %p\n", key, right_node);
-        std::ostringstream oss;
-        oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-        // printf("insert %d: thread id: %s: right node address: %p\n", key, oss.str().c_str(), right_node);
-      }
       return true;
     }
   }
@@ -408,7 +348,6 @@ template <typename KeyType>
  */
 bool LockFreeList<KeyType>::remove(const KeyType search_key) {
   Node<KeyType> *right_node, *right_node_next, *left_node;
-  // printf("------- Removing %d\n", search_key);
 
   while (true) {
     right_node = search(search_key, &left_node);
@@ -419,12 +358,10 @@ bool LockFreeList<KeyType>::remove(const KeyType search_key) {
       return false;
     }
 
-
     right_node_next = right_node->next.load();
-    // printf("remove %d: stop protecting %p\n", search_key, hp_manager.get_protected(5));
     hp_manager.protect(right_node_next, 5);
-    if (right_node->next.load() != right_node_next) {
-      // printf("remove %d: right node next changed, restarting search\n", search_key);
+    if (right_node->next.load() != right_node_next ||
+        right_node->is_deleted()) {
       continue;
     }
     // printf("remove %d: now protecting %p\n", search_key, right_node_next);
@@ -438,14 +375,6 @@ bool LockFreeList<KeyType>::remove(const KeyType search_key) {
   ASSERT(hp_manager.is_protected(left_node));
   // physically remove the node if possible
   if (left_node->next.compare_exchange_strong(right_node, right_node_next)) {
-    // printf("remove %d: retiring node address: %p, key: %d\n", search_key, right_node, right_node->key);
-    // printf("remove %d: after removal: left node %p -> right node %p\n", search_key, left_node, right_node_next);
-    if (!addr_valid(right_node_next)) {
-      // printf("remove %d: right node next bad addr %p\n", search_key, right_node_next);
-      std::ostringstream oss;
-      oss << hex << std::this_thread::get_id(); // Convert thread ID to string
-      // printf("remove %d: thread id: %s: right node next address: %p\n", search_key, oss.str().c_str(), right_node_next);
-    }
     hp_manager.retire_node(right_node);
   }
 
@@ -484,7 +413,6 @@ void LockFreeList<KeyType>::print_list() {
   }
   std::cout << "NULL\n";
 }
-
 
 template <typename KeyType>
 HazardPointer<Node<KeyType>> LockFreeList<KeyType>::hp_manager;
