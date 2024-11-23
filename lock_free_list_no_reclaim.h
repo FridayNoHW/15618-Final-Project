@@ -4,7 +4,8 @@
  * @brief This file contains the implementation of a lock-free linked list. The
  * reason the actual implementation is in the header file is because the
  * implementation is templated.
- * @bug Should address the ABA problem if time permits
+ * @note This implementation does not reclaim memory because it's difficult to
+ * keep the memory management overhead in check.
  */
 
 #ifndef LOCK_FREE_LIST_NO_RECLAIM_H
@@ -25,7 +26,8 @@ template <typename KeyType> struct LockFreeNoReclaimNode {
   /* TODO: extra memory usage, could use the last bit of next pointer instead
     because the LockFreeNoReclaimNode structure is more than 1 byte aligned */
   atomic<bool> is_deleted;
-  LockFreeNoReclaimNode(KeyType key) : key(key), next(nullptr), is_deleted(false) {}
+  LockFreeNoReclaimNode(KeyType key)
+      : key(key), next(nullptr), is_deleted(false) {}
 
   /**
    * @brief Helper function to check if the node is marked for deletion
@@ -41,7 +43,8 @@ private:
   LockFreeNoReclaimNode<KeyType> *head;
   LockFreeNoReclaimNode<KeyType> *tail;
 
-  LockFreeNoReclaimNode<KeyType> *search(const KeyType key, LockFreeNoReclaimNode<KeyType> **left_node);
+  LockFreeNoReclaimNode<KeyType> *
+  search(const KeyType key, LockFreeNoReclaimNode<KeyType> **left_node);
 
 public:
   /**
@@ -106,10 +109,11 @@ template <typename KeyType>
  * @note compare_exchange_weak is not used because although it's documented that
  * it's faster than spinning on compare_exchange_strong, the amount of extra
  * work involved in each iteration is not minimal
- * @return LockFreeNoReclaimNode<KeyType>* The node to the right where the key should be inserted
+ * @return LockFreeNoReclaimNode<KeyType>* The node to the right where the key
+ * should be inserted
  */
-LockFreeNoReclaimNode<KeyType> *LockFreeListNoReclaim<KeyType>::search(const KeyType key,
-                                             LockFreeNoReclaimNode<KeyType> **left_node) {
+LockFreeNoReclaimNode<KeyType> *LockFreeListNoReclaim<KeyType>::search(
+    const KeyType key, LockFreeNoReclaimNode<KeyType> **left_node) {
   LockFreeNoReclaimNode<KeyType> *left_node_next;
   LockFreeNoReclaimNode<KeyType> *right_node;
 
@@ -176,7 +180,8 @@ template <typename KeyType>
  * @return true If the key is successfully inserted, false otherwise
  */
 bool LockFreeListNoReclaim<KeyType>::insert(const KeyType key) {
-  LockFreeNoReclaimNode<KeyType> *new_node = new LockFreeNoReclaimNode<KeyType>(key);
+  LockFreeNoReclaimNode<KeyType> *new_node =
+      new LockFreeNoReclaimNode<KeyType>(key);
   LockFreeNoReclaimNode<KeyType> *left_node, *right_node;
 
   while (true) {

@@ -4,7 +4,12 @@
  * @brief This file contains the implementation of a lock-free linked list. The
  * reason the actual implementation is in the header file is because the
  * implementation is templated.
- * @bug Should address the ABA problem for memory reuse if time permits
+ * @bug ABA problem is not addressed in this implementation. For example, if we
+ * load the next pointer of a node, and then the node is deleted and a new node
+ * is inserted in its place, the next pointer will still be pointing to the old
+ * node. By the time we dereference the next pointer, the memory region might
+ * have been reused for a different node, ultimately leading to a segmentation
+ * fault.
  */
 
 #ifndef LOCK_FREE_LIST_H
@@ -18,13 +23,25 @@
 using namespace std;
 
 // #define DEBUG
-
+// clear all the assertions if not in debug mode
 #ifdef DEBUG
 #define ASSERT(x) assert(x)
 #else
 #define ASSERT(x)
 #endif
 
+/**
+ * @brief A class to manage hazard pointers for lock-free data structures
+ *
+ * We use an array of hazard pointers for each thread. Each thread can have
+ * up to HP_PER_THREAD hazard pointers. Pointers stored in the array are
+ * protected from being deleted. When a thread no longer need the reference to a
+ * node, we can safely replace the pointer (stored in a specific index) with the
+ * next one. The hazard pointers are used to protect nodes from being deleted
+ * while they are still being accessed by other threads.
+ *
+ * @tparam T Type of the data structure
+ */
 template <typename T> class HazardPointer {
 private:
   static constexpr int MAX_THREADS = 128;
@@ -42,6 +59,11 @@ private:
 
   array<HPRec, MAX_THREADS> hp_list;
 
+  /**
+   * @brief Function to claim a hazard pointer record (spot in the array)
+   *
+   * @return HPRec* Pointer to the hazard pointer record
+   */
   HPRec *acquire_hp_rec() {
     auto tid = this_thread::get_id();
     for (auto &rec : hp_list) {
@@ -57,6 +79,7 @@ private:
   }
 
 public:
+  /* below are helper functions to get/set states in the array */
   T *get_protected(int hp_index) {
     auto rec = acquire_hp_rec();
     return rec->hp[hp_index].load();
@@ -86,6 +109,11 @@ public:
     return false;
   }
 
+  /**
+   * @brief Retire a node and free the memory if possible
+   *
+   * @param ptr Pointer to the node to be retired
+   */
   void retire_node(T *ptr) {
     static thread_local vector<T *> retired_list;
     retired_list.push_back(ptr);
@@ -115,7 +143,8 @@ template <typename KeyType> struct LockFreeNode {
     because the LockFreeNode structure is more than 1 byte aligned */
   atomic<bool> marked;
   atomic<bool> deleted;
-  LockFreeNode(KeyType key) : key(key), next(nullptr), marked(false), deleted(false) {}
+  LockFreeNode(KeyType key)
+      : key(key), next(nullptr), marked(false), deleted(false) {}
 
   /**
    * @brief Helper function to check if the node is marked for deletion
@@ -134,7 +163,8 @@ private:
   LockFreeNode<KeyType> *tail;
   static HazardPointer<LockFreeNode<KeyType>> hp_manager;
 
-  LockFreeNode<KeyType> *search(const KeyType key, LockFreeNode<KeyType> **left_node);
+  LockFreeNode<KeyType> *search(const KeyType key,
+                                LockFreeNode<KeyType> **left_node);
 
 public:
   /**
@@ -161,7 +191,9 @@ public:
 
   bool get_marked(LockFreeNode<KeyType> *node) { return node->marked.load(); }
   KeyType get_key(LockFreeNode<KeyType> *node) { return node->key; }
-  LockFreeNode<KeyType> *get_next(LockFreeNode<KeyType> *node) { return node->next.load(); }
+  LockFreeNode<KeyType> *get_next(LockFreeNode<KeyType> *node) {
+    return node->next.load();
+  }
 
   /**
    * @brief Helper function to get the head of the list. The head is a sentinel
@@ -198,7 +230,6 @@ public:
   }
 };
 
-template <typename KeyType>
 /**
  * @brief Search for a spot to insert the key
  *
@@ -208,10 +239,13 @@ template <typename KeyType>
  * @note compare_exchange_weak is not used because although it's documented that
  * it's faster than spinning on compare_exchange_strong, the amount of extra
  * work involved in each iteration is not minimal
- * @return LockFreeNode<KeyType>* The node to the right where the key should be inserted
+ * @return LockFreeNode<KeyType>* The node to the right where the key should be
+ * inserted
  */
-LockFreeNode<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
-                                             LockFreeNode<KeyType> **left_node) {
+template <typename KeyType>
+LockFreeNode<KeyType> *
+LockFreeList<KeyType>::search(const KeyType key,
+                              LockFreeNode<KeyType> **left_node) {
 retry:
   // hp_manager.clear(0);
   // hp_manager.clear(1);
@@ -301,13 +335,13 @@ retry:
   }
 }
 
-template <typename KeyType>
 /**
  * @brief Insert a key into the list sorted by key
  *
  * @param key Key to be inserted
  * @return true If the key is successfully inserted, false otherwise
  */
+template <typename KeyType>
 bool LockFreeList<KeyType>::insert(const KeyType key) {
   LockFreeNode<KeyType> *new_node = new LockFreeNode<KeyType>(key);
   hp_manager.protect(new_node, 4);
@@ -335,7 +369,6 @@ bool LockFreeList<KeyType>::insert(const KeyType key) {
   }
 }
 
-template <typename KeyType>
 /**
  * @brief Remove a key from the list
  *
@@ -343,6 +376,7 @@ template <typename KeyType>
  * @return true If the key is successfully removed, false if the key is not
  * found
  */
+template <typename KeyType>
 bool LockFreeList<KeyType>::remove(const KeyType search_key) {
   LockFreeNode<KeyType> *right_node, *right_node_next, *left_node;
 
@@ -381,13 +415,13 @@ bool LockFreeList<KeyType>::remove(const KeyType search_key) {
   return true;
 }
 
-template <typename KeyType>
 /**
  * @brief Find a key in the list
  *
  * @param search_key Key to be searched
  * @return true If the key is found, false otherwise
  */
+template <typename KeyType>
 bool LockFreeList<KeyType>::find(const KeyType search_key) {
   LockFreeNode<KeyType> *right_node, *left_node;
   right_node = search(search_key, &left_node);
@@ -395,12 +429,11 @@ bool LockFreeList<KeyType>::find(const KeyType search_key) {
   return result;
 }
 
-template <typename KeyType>
 /**
  * @brief A helper function to print the list after operations
  * @note Not thread-safe
  */
-void LockFreeList<KeyType>::print_list() {
+template <typename KeyType> void LockFreeList<KeyType>::print_list() {
   LockFreeNode<KeyType> *current = get_front();
   while (current != tail) {
     if (!current->is_marked()) {
