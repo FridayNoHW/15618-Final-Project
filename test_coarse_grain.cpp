@@ -29,7 +29,7 @@ int test_sequential() {
 
   list.print_list();
   // list should contain 5, 20, 25
-  Node<int> *curr = list.get_front();
+  CoarseGrainNode<int> *curr = list.get_front();
   if (curr->key != 5) {
     cout << "First element is " << curr->key << " while it should be 5\n";
     ret = -1;
@@ -161,7 +161,7 @@ bool check_separate_workers(CoarseGrainList<int> &list) {
  * @return true If the list contains the expected elements, false otherwise
  */
 bool check_mixed_worker_no_delete(CoarseGrainList<int> &list, int num_threads) {
-  Node<int> *curr = list.get_front();
+  CoarseGrainNode<int> *curr = list.get_front();
   for (int i = 0; i < NUM_OPERATIONS * num_threads; i += 2) {
     // even number should be in the list
     if (curr->key != i) {

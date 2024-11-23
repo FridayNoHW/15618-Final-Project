@@ -12,9 +12,7 @@
 
 #include <assert.h>
 #include <atomic>
-#include <cstring>
 #include <iostream>
-#include <sstream>
 #include <thread>
 #include <vector>
 using namespace std;
@@ -99,7 +97,6 @@ public:
         // clear the memory before deleting
         node->deleted.store(true);
         delete node;
-        // printf("Node %p deleted\n", node);
       } else {
         new_retired_list.push_back(node);
       }
@@ -108,17 +105,17 @@ public:
   }
 };
 
-template <typename KeyType> struct Node {
+template <typename KeyType> struct LockFreeNode {
   KeyType key;
-  atomic<Node *> next;
+  atomic<LockFreeNode *> next;
   /* marked is used to indicate that the node is logically deleted, this
    * makes sure that other threads don't try to access the node before we have a
    * chance to physically delete them */
   /* TODO: extra memory usage, could use the last bit of next pointer instead
-    because the Node structure is more than 1 byte aligned */
+    because the LockFreeNode structure is more than 1 byte aligned */
   atomic<bool> marked;
   atomic<bool> deleted;
-  Node(KeyType key) : key(key), next(nullptr), marked(false), deleted(false) {}
+  LockFreeNode(KeyType key) : key(key), next(nullptr), marked(false), deleted(false) {}
 
   /**
    * @brief Helper function to check if the node is marked for deletion
@@ -133,11 +130,11 @@ template <typename KeyType> struct Node {
 
 template <typename KeyType> class LockFreeList {
 private:
-  Node<KeyType> *head;
-  Node<KeyType> *tail;
-  static HazardPointer<Node<KeyType>> hp_manager;
+  LockFreeNode<KeyType> *head;
+  LockFreeNode<KeyType> *tail;
+  static HazardPointer<LockFreeNode<KeyType>> hp_manager;
 
-  Node<KeyType> *search(const KeyType key, Node<KeyType> **left_node);
+  LockFreeNode<KeyType> *search(const KeyType key, LockFreeNode<KeyType> **left_node);
 
 public:
   /**
@@ -145,8 +142,8 @@ public:
    */
   LockFreeList() {
     // use default constructor for KeyType
-    head = new Node<KeyType>(KeyType{});
-    tail = new Node<KeyType>(KeyType{});
+    head = new LockFreeNode<KeyType>(KeyType{});
+    tail = new LockFreeNode<KeyType>(KeyType{});
     head->next.store(tail);
   }
 
@@ -154,47 +151,47 @@ public:
    * @brief Destroy the Lock Free List object
    */
   ~LockFreeList() {
-    Node<KeyType> *curr = head;
+    LockFreeNode<KeyType> *curr = head;
     while (curr != nullptr) {
-      Node<KeyType> *next = curr->next.load();
+      LockFreeNode<KeyType> *next = curr->next.load();
       hp_manager.retire_node(curr);
       curr = next;
     }
   }
 
-  bool get_marked(Node<KeyType> *node) { return node->marked.load(); }
-  KeyType get_key(Node<KeyType> *node) { return node->key; }
-  Node<KeyType> *get_next(Node<KeyType> *node) { return node->next.load(); }
+  bool get_marked(LockFreeNode<KeyType> *node) { return node->marked.load(); }
+  KeyType get_key(LockFreeNode<KeyType> *node) { return node->key; }
+  LockFreeNode<KeyType> *get_next(LockFreeNode<KeyType> *node) { return node->next.load(); }
 
   /**
    * @brief Helper function to get the head of the list. The head is a sentinel
    * node
    *
-   * @return Node<KeyType>* The head of the list
+   * @return LockFreeNode<KeyType>* The head of the list
    */
-  Node<KeyType> *get_head() { return head; }
+  LockFreeNode<KeyType> *get_head() { return head; }
 
   /**
    * @brief Helper function to get the front of the list. The front is the first
    * node after the head
    *
-   * @return Node<KeyType>* The front of the list
+   * @return LockFreeNode<KeyType>* The front of the list
    */
-  Node<KeyType> *get_front() { return head->next.load(); }
+  LockFreeNode<KeyType> *get_front() { return head->next.load(); }
 
   /**
    * @brief Helper function to get the tail of the list. The tail is a sentinel
    * node
    *
-   * @return Node<KeyType>* The tail of the list
+   * @return LockFreeNode<KeyType>* The tail of the list
    */
-  Node<KeyType> *get_tail() { return tail; }
+  LockFreeNode<KeyType> *get_tail() { return tail; }
 
   bool insert(const KeyType key);
   bool remove(const KeyType key);
   bool find(const KeyType search_key);
   void print_list();
-  bool addr_valid(Node<KeyType> *node) {
+  bool addr_valid(LockFreeNode<KeyType> *node) {
     uintptr_t addr = reinterpret_cast<uintptr_t>(node);
     uintptr_t addr_high = addr >> 44;
     return ((addr & 0xf) == 0) && addr_high >= 0x5 && addr_high <= 0x7;
@@ -211,21 +208,21 @@ template <typename KeyType>
  * @note compare_exchange_weak is not used because although it's documented that
  * it's faster than spinning on compare_exchange_strong, the amount of extra
  * work involved in each iteration is not minimal
- * @return Node<KeyType>* The node to the right where the key should be inserted
+ * @return LockFreeNode<KeyType>* The node to the right where the key should be inserted
  */
-Node<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
-                                             Node<KeyType> **left_node) {
+LockFreeNode<KeyType> *LockFreeList<KeyType>::search(const KeyType key,
+                                             LockFreeNode<KeyType> **left_node) {
 retry:
   // hp_manager.clear(0);
   // hp_manager.clear(1);
   // hp_manager.clear(2);
 
-  Node<KeyType> *left_node_next;
-  Node<KeyType> *right_node;
+  LockFreeNode<KeyType> *left_node_next;
+  LockFreeNode<KeyType> *right_node;
   while (true) {
-    Node<KeyType> *t = head;
+    LockFreeNode<KeyType> *t = head;
     hp_manager.protect(t, 0);
-    Node<KeyType> *t_next = head->next.load();
+    LockFreeNode<KeyType> *t_next = head->next.load();
     hp_manager.protect(t_next, 1);
     if (t->next.load() != t_next || t->is_deleted() || t_next->is_deleted()) {
       goto retry;
@@ -312,9 +309,9 @@ template <typename KeyType>
  * @return true If the key is successfully inserted, false otherwise
  */
 bool LockFreeList<KeyType>::insert(const KeyType key) {
-  Node<KeyType> *new_node = new Node<KeyType>(key);
+  LockFreeNode<KeyType> *new_node = new LockFreeNode<KeyType>(key);
   hp_manager.protect(new_node, 4);
-  Node<KeyType> *left_node, *right_node;
+  LockFreeNode<KeyType> *left_node, *right_node;
 
   while (true) {
     right_node = search(key, &left_node);
@@ -347,7 +344,7 @@ template <typename KeyType>
  * found
  */
 bool LockFreeList<KeyType>::remove(const KeyType search_key) {
-  Node<KeyType> *right_node, *right_node_next, *left_node;
+  LockFreeNode<KeyType> *right_node, *right_node_next, *left_node;
 
   while (true) {
     right_node = search(search_key, &left_node);
@@ -392,7 +389,7 @@ template <typename KeyType>
  * @return true If the key is found, false otherwise
  */
 bool LockFreeList<KeyType>::find(const KeyType search_key) {
-  Node<KeyType> *right_node, *left_node;
+  LockFreeNode<KeyType> *right_node, *left_node;
   right_node = search(search_key, &left_node);
   bool result = right_node != tail && right_node->key == search_key;
   return result;
@@ -404,7 +401,7 @@ template <typename KeyType>
  * @note Not thread-safe
  */
 void LockFreeList<KeyType>::print_list() {
-  Node<KeyType> *current = get_front();
+  LockFreeNode<KeyType> *current = get_front();
   while (current != tail) {
     if (!current->is_marked()) {
       std::cout << current->key << " -> ";
@@ -415,6 +412,6 @@ void LockFreeList<KeyType>::print_list() {
 }
 
 template <typename KeyType>
-HazardPointer<Node<KeyType>> LockFreeList<KeyType>::hp_manager;
+HazardPointer<LockFreeNode<KeyType>> LockFreeList<KeyType>::hp_manager;
 
 #endif // LOCK_FREE_LIST_H

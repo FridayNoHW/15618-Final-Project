@@ -1,28 +1,31 @@
+#ifndef COARSE_GRAIN_LIST_H
+#define COARSE_GRAIN_LIST_H
+
 #include <mutex>
 #include <iostream>
 #include <memory>
 using namespace std;
 
 template <typename T>
-struct Node {
+struct CoarseGrainNode {
   T key;
-  std::shared_ptr<Node<T>> next;
-  Node(const T &key) : key(key), next(nullptr) {}
-  Node() : next(nullptr) {}
+  std::shared_ptr<CoarseGrainNode<T>> next;
+  CoarseGrainNode(const T &key) : key(key), next(nullptr) {}
+  CoarseGrainNode() : next(nullptr) {}
 };
 
 template <typename T>
 class CoarseGrainList {
 private:
   // sentinel nodes
-  shared_ptr<Node<T>> head;
-  shared_ptr<Node<T>> tail;
+  shared_ptr<CoarseGrainNode<T>> head;
+  shared_ptr<CoarseGrainNode<T>> tail;
   mutable mutex list_mutex;
 
 public:
   CoarseGrainList() {
-    head = make_shared<Node<T>>();
-    tail = make_shared<Node<T>>();
+    head = make_shared<CoarseGrainNode<T>>();
+    tail = make_shared<CoarseGrainNode<T>>();
     head->next = tail;
   }
 
@@ -30,29 +33,29 @@ public:
     head->next = nullptr;
   }
 
-  Node<T>* get_head() {
+  CoarseGrainNode<T>* get_head() {
     lock_guard<mutex> lock(list_mutex);
     return head.get();
   }
 
-  Node<T>* get_tail() {
+  CoarseGrainNode<T>* get_tail() {
     lock_guard<mutex> lock(list_mutex);
     return tail.get();
   }
 
-  Node<T>* get_front() {
+  CoarseGrainNode<T>* get_front() {
     lock_guard<mutex> lock(list_mutex);
     return head->next.get();
   }
 
-  Node<T>* get_next(Node<T>* current) {
+  CoarseGrainNode<T>* get_next(CoarseGrainNode<T>* current) {
     lock_guard<mutex> lock(list_mutex);
     return current->next.get();
   }
 
   bool insert(const T key) {
     lock_guard<mutex> lock(list_mutex);
-    shared_ptr<Node<T>> new_node = make_shared<Node<T>>(key);
+    shared_ptr<CoarseGrainNode<T>> new_node = make_shared<CoarseGrainNode<T>>(key);
     auto current = head;
 
     while (current->next != tail && current->next->key < key) {
@@ -110,3 +113,5 @@ public:
     cout << "NULL\n";
   }
 };
+
+#endif // COARSE_GRAIN_LIST_H
