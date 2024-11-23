@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -std=c++11 -Wall -g
 
 TARGETS = test_lock_free test_coarse_grain bench
-LOCK_FREE_SRC = test.cpp
+LOCK_FREE_SRC = test_lock_free.cpp
 COARSE_GRAIN_SRC = test_coarse_grain.cpp
 HEADERS = lock_free_list.h coarse_grain_list.h
 
