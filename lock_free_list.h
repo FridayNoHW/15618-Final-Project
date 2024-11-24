@@ -45,7 +45,7 @@ using namespace std;
 template <typename T> class HazardPointer {
 private:
   static constexpr int MAX_THREADS = 128;
-  static constexpr int HP_PER_THREAD = 6;
+  static constexpr int HP_PER_THREAD = 5;
 
   struct HPRec {
     atomic<thread::id> thread_id;
@@ -115,21 +115,29 @@ public:
    * @param ptr Pointer to the node to be retired
    */
   void retire_node(T *ptr) {
+    const int DELETION_THRESHOLD = 50;
+
     static thread_local vector<T *> retired_list;
+    static thread_local int retired_count = 0;
+
     retired_list.push_back(ptr);
+    retired_count++;
 
     // Scan and free nodes that are safe to delete
-    vector<T *> new_retired_list;
-    for (auto node : retired_list) {
-      if (!is_protected(node)) {
-        // clear the memory before deleting
-        node->deleted.store(true);
-        delete node;
-      } else {
-        new_retired_list.push_back(node);
+    if (retired_count >= DELETION_THRESHOLD) {
+      vector<T *> new_retired_list;
+      for (auto node : retired_list) {
+        if (!is_protected(node)) {
+          // mark the memory before deleting
+          node->deleted.store(true);
+          delete node;
+          retired_count--;
+        } else {
+          new_retired_list.push_back(node);
+        }
       }
+      retired_list = move(new_retired_list);
     }
-    retired_list = move(new_retired_list);
   }
 };
 
@@ -344,7 +352,6 @@ retry:
 template <typename KeyType>
 bool LockFreeList<KeyType>::insert(const KeyType key) {
   LockFreeNode<KeyType> *new_node = new LockFreeNode<KeyType>(key);
-  hp_manager.protect(new_node, 4);
   LockFreeNode<KeyType> *left_node, *right_node;
 
   while (true) {
@@ -360,7 +367,6 @@ bool LockFreeList<KeyType>::insert(const KeyType key) {
 
     ASSERT(hp_manager.is_protected(left_node));
     ASSERT(hp_manager.is_protected(right_node));
-    ASSERT(hp_manager.is_protected(new_node));
 
     // loop back until we get a chance to insert the new node
     if (left_node->next.compare_exchange_strong(right_node, new_node)) {
@@ -390,12 +396,11 @@ bool LockFreeList<KeyType>::remove(const KeyType search_key) {
     }
 
     right_node_next = right_node->next.load();
-    hp_manager.protect(right_node_next, 5);
+    hp_manager.protect(right_node_next, 4);
     if (right_node->next.load() != right_node_next ||
         right_node->is_deleted()) {
       continue;
     }
-    // printf("remove %d: now protecting %p\n", search_key, right_node_next);
     ASSERT(hp_manager.is_protected(right_node));
     bool expected = false;
     // Try to mark the node using compare_exchange
