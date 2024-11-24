@@ -8,3 +8,16 @@ Link to the paper: https://www.cl.cam.ac.uk/research/srg/netos/papers/2001-casli
 
 ## Project Proposal
 Link to proposal Google doc: https://docs.google.com/document/d/1zKJ-L3fa_uh2x6Bgerr4PiNjBTEveB4pxqauIQIiwhc/edit?usp=sharing
+
+## Project Progress and Schedule (for milestone report)
+Link to milestone report: https://docs.google.com/document/d/1Uub-LW5qtIFdA51BN8OwxFpsSr20GJvlthuMF0D_eRg/edit?usp=sharing
+
+| Week Start | Task                                                                                   | Completion |
+|------------|----------------------------------------------------------------------------------------|------------|
+| Nov. 11    | Project proposal, start working on lock-free linked-list                              | Done       |
+| Nov. 18    | Implement coarse-grain linked-list, continue working on lock-free linked-list. Start benchmarking if possible. | Done       |
+| Nov. 25    | Perform experiments on the PSC machines. Start working on the poster.                 |            |
+| Dec. 2     | Start final project report                                                            |            |
+| Dec. 9     | If have extra time, optimize for ABA                                                  |            |
+
+Note for course staff: This is an updated schedule because I’m working ahead a bit for this class to make sure I have some time left for other classes.
