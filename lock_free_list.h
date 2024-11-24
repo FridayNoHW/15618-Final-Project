@@ -44,7 +44,7 @@ using namespace std;
  */
 template <typename T> class HazardPointer {
 private:
-  static constexpr int MAX_THREADS = 128;
+  static constexpr int MAX_THREADS = 256;
   static constexpr int HP_PER_THREAD = 5;
 
   struct HPRec {

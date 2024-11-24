@@ -15,7 +15,7 @@ void log_result(const std::string &test_type, int threads, int duration) {
 }
 
 static const int NUM_OPERATIONS = 150;
-static const int MAX_THREADS = 128;
+static const int MAX_THREADS = 256;
 
 void coarse_grain_mixed_worker_all_delete(CoarseGrainList<int> &list,
                                           int thread_id) {
