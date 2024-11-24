@@ -3,8 +3,18 @@
 #include "lock_free_list_no_reclaim.h"
 #include <thread>
 #include <vector>
+#include <fstream>
+#include <sstream>
 
-static const int NUM_OPERATIONS = 200;
+std::ofstream result_file("benchmark_results.txt");
+
+void log_result(const std::string &test_type, int threads, int duration) {
+  if (result_file.is_open()) {
+    result_file << test_type << "," << threads << "," << duration << "\n";
+  }
+}
+
+static const int NUM_OPERATIONS = 150;
 static const int MAX_THREADS = 128;
 
 void coarse_grain_mixed_worker_all_delete(CoarseGrainList<int> &list,
@@ -53,6 +63,7 @@ void benchmark_coarse_grain() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("CoarseGrainList_insert", num_threads, duration);
   }
 
   std::cout << "Benchmarking CoarseGrainList mixed\n";
@@ -79,6 +90,7 @@ void benchmark_coarse_grain() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("CoarseGrainList_mixed", num_threads, duration);
   }
 }
 
@@ -128,6 +140,7 @@ void benchmark_lock_free() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("LockFreeList_insert", num_threads, duration);
   }
 
   std::cout << "Benchmarking LockFreeList mixed\n";
@@ -154,6 +167,7 @@ void benchmark_lock_free() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("LockFreeList_mixed", num_threads, duration);
   }
 }
 
@@ -202,6 +216,7 @@ void benchmark_lock_free_no_reclaim() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("LockFreeListNoReclaim_insert", num_threads, duration);
   }
 
   std::cout << "Benchmarking LockFreeListNoReclaim mixed\n";
@@ -228,12 +243,13 @@ void benchmark_lock_free_no_reclaim() {
 
     std::cout << "Threads: " << num_threads << " | Time: " << duration
               << " ms\n";
+    log_result("LockFreeListNoReclaim_mixed", num_threads, duration);
   }
 }
 
 int main() {
-  benchmark_coarse_grain();
   benchmark_lock_free();
+  benchmark_coarse_grain();
   benchmark_lock_free_no_reclaim();
   return 0;
 }
