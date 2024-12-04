@@ -21,3 +21,9 @@ Link to milestone report: https://docs.google.com/document/d/1Uub-LW5qtIFdA51BN8
 | Dec. 9     | If have extra time, optimize for ABA                                                  |            |
 
 Note for course staff: This is an updated schedule because I’m working ahead a bit for this class to make sure I have some time left for other classes.
+
+## Project Poster
+Link to project poster Google Doc: https://docs.google.com/document/d/1k8OTqXV0XcFsKd3gXZHm64ejR7nChKthEuZCQi5FXeY/edit?usp=sharing
+
+## Project Final Report
+Link to final report Google Doc: https://docs.google.com/document/d/13t50YLZIUDM-GWTFDIlZsXV1nzOvvIbkIDK67WgEgdE/edit?usp=sharing
